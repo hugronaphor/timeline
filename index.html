@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Timestamp Timeline Helper</title>
+  <style>
+    :root {
+      --primary-color: #3498db;
+      --secondary-color: #2c3e50;
+      --accent-color: #e74c3c;
+      --highlight-color: #f39c12;
+      --light-bg: #f8f9fa;
+      --border-radius: 8px;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f2f5;
+      color: var(--secondary-color);
+    }
+
+    /* A narrow container for everything EXCEPT the timeline (900px max). */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: white;
+      border-radius: var(--border-radius);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      margin-bottom: 30px;
+    }
+
+    h2 {
+      text-align: center;
+      margin-top: 0;
+    }
+
+    /* Full-bleed wrapper so the timeline can go edge to edge. */
+    #timeline-wrapper {
+      position: relative;
+      width: 100vw;         /* occupy full viewport width */
+      left: 50%;            /* shift ... */
+      right: 50%;
+      margin-left: -50vw;   /* ... then center it (“full-bleed” trick) */
+      margin-right: -50vw;
+      background: #fff;     /* or remove if you want no BG behind timeline */
+    }
+
+    /* The scrollable timeline container. */
+    #timeline-container {
+      position: relative;
+      width: 100%;
+      height: 300px;        /* taller timeline */
+      overflow-x: auto;
+      background: #f0f0f0;  /* faint background for the timeline area */
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    /* The actual horizontal timeline line. */
+    #timeline {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--secondary-color);
+      min-width: 100%;
+    }
+
+    /* Markers on the timeline */
+    .timestamp-marker {
+      position: absolute;
+      bottom: 0;
+      transform: translateX(-50%);
+      cursor: pointer;
+      /* Restrict transitions to color/box-shadow, so shape won't change */
+      transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .timestamp-marker.highlighted {
+      z-index: 100;
+    }
+
+    .timestamp-marker.highlighted .timestamp-dot {
+      background-color: var(--highlight-color);
+      box-shadow: 0 0 10px var(--highlight-color);
+    }
+
+    .timestamp-marker.highlighted .timestamp-line {
+      background-color: var(--highlight-color);
+    }
+
+    .timestamp-marker.highlighted .timestamp-label {
+      background-color: var(--highlight-color);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      opacity: 1;
+    }
+
+    /* The vertical line that goes above the dot */
+    .timestamp-line {
+      width: 2px;
+      height: 40px;
+      background: var(--primary-color);
+      margin: 0 auto;
+      position: relative;
+      bottom: 12px;
+      transition: background-color 0.2s ease;
+    }
+
+    /* The dot at the very bottom */
+    .timestamp-dot {
+      width: 12px;
+      height: 12px;
+      background-color: var(--primary-color);
+      border-radius: 50%;
+      margin: 0 auto;
+      transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    /* The floating label above the dot+line */
+    .timestamp-label {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 6px 10px;
+      border-radius: var(--border-radius);
+      white-space: nowrap;
+      font-size: 12px;
+      margin-bottom: 5px;
+      opacity: 0.9;
+      text-align: center;
+      transform: translateX(-50%);
+      position: absolute;
+      bottom: 55px; /* above the line + dot */
+      max-width: 200px;
+      transition: background-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+
+    .timestamp-label:hover {
+      opacity: 1;
+      z-index: 100;
+      white-space: normal;
+      width: auto;
+      overflow: visible;
+    }
+
+    .timestamp-label .timestamp-caption {
+      font-weight: bold;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+      padding-bottom: 2px;
+      margin-bottom: 2px;
+      display: block;
+    }
+
+    /* Year & month markers along the bottom axis */
+    .year-marker,
+    .month-marker {
+      position: absolute;
+      bottom: -20px;
+      transform: translateX(-50%);
+      font-weight: bold;
+      color: var(--secondary-color);
+      font-size: 12px;
+    }
+
+    .year-tick,
+    .month-tick {
+      position: absolute;
+      width: 1px;
+      height: 10px;
+      background-color: var(--secondary-color);
+      bottom: 0;
+    }
+
+    /* Input + controls area */
+    #input-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 200px;
+      gap: 5px;
+    }
+
+    .input-label {
+      font-size: 12px;
+      color: var(--secondary-color);
+    }
+
+    #timestamp-input,
+    #timestamp-label-input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: var(--border-radius);
+      font-size: 14px;
+    }
+
+    .buttons-group {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    button {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: var(--border-radius);
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s ease;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    /* Zoom + other controls */
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .zoom-controls {
+      display: flex;
+      border: 1px solid #ddd;
+      border-radius: var(--border-radius);
+      overflow: hidden;
+    }
+
+    .zoom-btn {
+      background-color: white;
+      color: var(--secondary-color);
+      border: none;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .zoom-btn:hover {
+      background-color: #f1f1f1;
+    }
+
+    .zoom-level {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 15px;
+      background-color: var(--light-bg);
+      font-size: 14px;
+      min-width: 60px;
+    }
+
+    /* Timestamps list */
+    .timestamp-list-container {
+      margin-top: 30px;
+      border-top: 1px solid #eee;
+      padding-top: 20px;
+    }
+
+    #timestamp-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .timestamp-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background-color: var(--light-bg);
+      margin-bottom: 8px;
+      border-radius: var(--border-radius);
+      transition: background-color 0.2s ease;
+      cursor: pointer;
+    }
+
+    .timestamp-item:hover {
+      background-color: #e9ecef;
+    }
+
+    .timestamp-item.highlighted {
+      background-color: rgba(243, 156, 18, 0.2);
+      border-left: 4px solid var(--highlight-color);
+    }
+
+    .timestamp-info {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .timestamp-unix {
+      font-weight: bold;
+      color: var(--secondary-color);
+    }
+
+    .timestamp-date {
+      color: #666;
+      font-size: 13px;
+    }
+
+    .timestamp-custom-label {
+      color: var(--primary-color);
+      font-weight: bold;
+      font-size: 14px;
+      margin-top: 2px;
+    }
+
+    .timestamp-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .delete-btn {
+      background-color: var(--accent-color);
+      color: white;
+      border: none;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s ease;
+    }
+
+    .delete-btn:hover {
+      background-color: #c0392b;
+    }
+
+    .tooltip {
+      display: none;
+      position: absolute;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        margin-bottom: 0; /* or as needed */
+      }
+      #input-container {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Heading in a normal container -->
+  <div class="container">
+    <h2>Timestamp Timeline Helper</h2>
+  </div>
+
+  <!-- Full-bleed timeline wrapper + timeline container -->
+  <div id="timeline-wrapper">
+    <div id="timeline-container">
+      <div id="timeline"></div>
+    </div>
+  </div>
+
+  <!-- Return to the narrower container for inputs, controls, and list -->
+  <div class="container">
+
+    <!-- Zoom controls, etc. (optional, or place them elsewhere if desired) -->
+    <div class="controls">
+      <div class="zoom-controls">
+        <button class="zoom-btn" id="zoom-out">−</button>
+        <div class="zoom-level">100%</div>
+        <button class="zoom-btn" id="zoom-in">+</button>
+      </div>
+      <button id="fit-all-btn">Fit All</button>
+    </div>
+
+    <!-- Inputs below timeline, above the list -->
+    <div id="input-container">
+      <div class="input-group">
+        <label class="input-label" for="timestamp-input">Unix Timestamp</label>
+        <input type="number" id="timestamp-input" placeholder="Enter Unix Timestamp">
+      </div>
+      <div class="input-group">
+        <label class="input-label" for="timestamp-label-input">Label (optional)</label>
+        <input type="text" id="timestamp-label-input" placeholder="Enter an optional label">
+      </div>
+      <div class="buttons-group">
+        <button id="add-btn">Add Timestamp</button>
+        <button id="current-time-btn">Use Current Time</button>
+      </div>
+    </div>
+
+    <!-- "Clear All" also below timeline, as requested -->
+    <button id="clear-all-btn">Clear All</button>
+
+    <!-- List of timestamps -->
+    <div class="timestamp-list-container">
+      <h3>Timestamps</h3>
+      <ul id="timestamp-list"></ul>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Grab the elements
+      const timelineEl = document.getElementById('timeline');
+      const timelineContainer = document.getElementById('timeline-container');
+      const timestampList = document.getElementById('timestamp-list');
+      const timestampInput = document.getElementById('timestamp-input');
+      const timestampLabelInput = document.getElementById('timestamp-label-input');
+      const addBtn = document.getElementById('add-btn');
+      const currentTimeBtn = document.getElementById('current-time-btn');
+      const zoomInBtn = document.getElementById('zoom-in');
+      const zoomOutBtn = document.getElementById('zoom-out');
+      const zoomLevelEl = document.querySelector('.zoom-level');
+      const fitAllBtn = document.getElementById('fit-all-btn');
+      const clearAllBtn = document.getElementById('clear-all-btn');
+      const tooltip = document.getElementById('tooltip');
+
+      let timestamps = [];
+      let zoomLevel = 100;
+      let minTimestamp;
+      let maxTimestamp;
+      let timeRange;
+      let hoveredIndex = null;
+
+      addBtn.addEventListener('click', addTimestamp);
+      currentTimeBtn.addEventListener('click', addCurrentTime);
+      zoomInBtn.addEventListener('click', zoomIn);
+      zoomOutBtn.addEventListener('click', zoomOut);
+      fitAllBtn.addEventListener('click', fitAllTimestamps);
+      clearAllBtn.addEventListener('click', clearAllTimestamps);
+
+      timestampInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') addTimestamp();
+      });
+      timestampLabelInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') addTimestamp();
+      });
+
+      initializeTimeline();
+
+      function initializeTimeline() {
+        // Default to "yesterday" through "tomorrow"
+        const now = Math.floor(Date.now() / 1000);
+        minTimestamp = now - 86400;
+        maxTimestamp = now + 86400;
+        timeRange = maxTimestamp - minTimestamp;
+        renderTimeline();
+      }
+
+      function addTimestamp() {
+        const ts = parseInt(timestampInput.value);
+        if (isNaN(ts)) {
+          alert("Please enter a valid Unix timestamp.");
+          return;
+        }
+        const label = timestampLabelInput.value.trim() || null;
+        timestamps.push({ timestamp: ts, label });
+        timestampInput.value = "";
+        timestampLabelInput.value = "";
+        updateTimeRange();
+        renderTimeline();
+        renderTimestampList();
+      }
+
+      function addCurrentTime() {
+        const now = Math.floor(Date.now() / 1000);
+        const label = timestampLabelInput.value.trim() || "Current Time";
+        timestamps.push({ timestamp: now, label });
+        timestampLabelInput.value = "";
+        updateTimeRange();
+        renderTimeline();
+        renderTimestampList();
+      }
+
+      function removeTimestamp(idx) {
+        timestamps.splice(idx, 1);
+        if (!timestamps.length) {
+          initializeTimeline();
+        } else {
+          updateTimeRange();
+          renderTimeline();
+        }
+        renderTimestampList();
+      }
+
+      function updateTimeRange() {
+        if (!timestamps.length) return;
+        const values = timestamps.map(t => t.timestamp);
+        minTimestamp = Math.min(...values);
+        maxTimestamp = Math.max(...values);
+        // add padding
+        const pad = (maxTimestamp - minTimestamp) * 0.1 || 86400;
+        minTimestamp -= pad;
+        maxTimestamp += pad;
+        timeRange = maxTimestamp - minTimestamp;
+      }
+
+      function renderTimestampList() {
+        timestampList.innerHTML = "";
+        timestamps.forEach((item, idx) => {
+          const li = document.createElement("li");
+          li.className = "timestamp-item";
+          li.dataset.index = idx;
+          if (hoveredIndex === idx) li.classList.add("highlighted");
+
+          const infoDiv = document.createElement("div");
+          infoDiv.className = "timestamp-info";
+
+          const unixSpan = document.createElement("span");
+          unixSpan.className = "timestamp-unix";
+          unixSpan.textContent = item.timestamp;
+
+          const dateSpan = document.createElement("span");
+          dateSpan.className = "timestamp-date";
+          const d = new Date(item.timestamp * 1000);
+          dateSpan.textContent = d.toLocaleString();
+
+          infoDiv.appendChild(unixSpan);
+          infoDiv.appendChild(dateSpan);
+
+          if (item.label) {
+            const lblSpan = document.createElement("span");
+            lblSpan.className = "timestamp-custom-label";
+            lblSpan.textContent = item.label;
+            infoDiv.appendChild(lblSpan);
+          }
+
+          const actionsDiv = document.createElement("div");
+          actionsDiv.className = "timestamp-actions";
+
+          const delBtn = document.createElement("button");
+          delBtn.className = "delete-btn";
+          delBtn.innerHTML = "✖";
+          delBtn.onclick = function(e) {
+            e.stopPropagation();
+            removeTimestamp(idx);
+          };
+
+          actionsDiv.appendChild(delBtn);
+
+          li.appendChild(infoDiv);
+          li.appendChild(actionsDiv);
+
+          // Hover highlighting
+          li.addEventListener("mouseenter", function() {
+            hoveredIndex = idx;
+            highlightMarker(idx);
+          });
+          li.addEventListener("mouseleave", function() {
+            hoveredIndex = null;
+            unhighlightAllMarkers();
+          });
+
+          // Click => scroll timeline
+          li.addEventListener("click", function() {
+            const marker = document.querySelector(`.timestamp-marker[data-index='${idx}']`);
+            if (marker) {
+              const markerLeft = marker.offsetLeft;
+              const containerWidth = timelineContainer.clientWidth;
+              timelineContainer.scrollLeft = markerLeft - containerWidth / 2;
+            }
+          });
+
+          timestampList.appendChild(li);
+        });
+      }
+
+      function renderTimeline() {
+        timelineEl.innerHTML = "";
+
+        const baseWidth = timelineContainer.clientWidth;
+        const scaledWidth = baseWidth * (zoomLevel / 100);
+        timelineEl.style.width = scaledWidth + "px";
+
+        // Render years
+        renderYearMarkers();
+
+        // Render months if zoom is high
+        if (zoomLevel >= 200) {
+          renderMonthMarkers();
+        }
+
+        // Render each timestamp
+        timestamps.forEach((item, idx) => {
+          const pos = ((item.timestamp - minTimestamp) / timeRange) * 100;
+          const marker = document.createElement("div");
+          marker.className = "timestamp-marker";
+          marker.dataset.index = idx;
+          marker.style.left = pos + "%";
+
+          if (hoveredIndex === idx) {
+            marker.classList.add("highlighted");
+          }
+
+          const dateObj = new Date(item.timestamp * 1000);
+          let labelHTML = dateObj.toLocaleString();
+          if (item.label) {
+            labelHTML = `<span class="timestamp-caption">${item.label}</span>` + labelHTML;
+          }
+
+          const label = document.createElement("div");
+          label.className = "timestamp-label";
+          label.innerHTML = labelHTML;
+
+          const line = document.createElement("div");
+          line.className = "timestamp-line";
+
+          const dot = document.createElement("div");
+          dot.className = "timestamp-dot";
+
+          marker.appendChild(label);
+          marker.appendChild(line);
+          marker.appendChild(dot);
+
+          // Hover => highlight, tooltip
+          marker.addEventListener("mouseenter", e => {
+            highlightMarker(idx);
+            let tt = `<strong>Unix:</strong> ${item.timestamp}<br><strong>Date:</strong> ${dateObj.toLocaleString()}`;
+            if (item.label) {
+              tt = `<strong>${item.label}</strong><br>` + tt;
+            }
+            showTooltip(e, tt);
+          });
+          marker.addEventListener("mousemove", e => moveTooltip(e));
+          marker.addEventListener("mouseleave", () => {
+            unhighlightAllMarkers();
+            hideTooltip();
+          });
+
+          timelineEl.appendChild(marker);
+        });
+
+        adjustOverlappingLabels();
+      }
+
+      function renderYearMarkers() {
+        const startYear = new Date(minTimestamp * 1000).getFullYear();
+        const endYear = new Date(maxTimestamp * 1000).getFullYear();
+
+        for (let y = startYear; y <= endYear; y++) {
+          const yearTs = Date.UTC(y, 0, 1) / 1000; // Jan 1 UTC
+          if (yearTs < minTimestamp || yearTs > maxTimestamp) continue;
+          const pos = ((yearTs - minTimestamp) / timeRange) * 100;
+
+          const tick = document.createElement("div");
+          tick.className = "year-tick";
+          tick.style.left = pos + "%";
+          timelineEl.appendChild(tick);
+
+          const label = document.createElement("div");
+          label.className = "year-marker";
+          label.textContent = y;
+          label.style.left = pos + "%";
+          timelineEl.appendChild(label);
+        }
+      }
+
+      function renderMonthMarkers() {
+        const startDate = new Date(minTimestamp * 1000);
+        const endDate = new Date(maxTimestamp * 1000);
+        let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+
+        while (current <= endDate) {
+          const ts = current.getTime() / 1000;
+          if (ts >= minTimestamp && ts <= maxTimestamp) {
+            const pos = ((ts - minTimestamp) / timeRange) * 100;
+            const tick = document.createElement("div");
+            tick.className = "month-tick";
+            tick.style.left = pos + "%";
+            timelineEl.appendChild(tick);
+
+            const label = document.createElement("div");
+            label.className = "month-marker";
+            label.textContent = current.toLocaleString('default', { month: 'short' });
+            label.style.left = pos + "%";
+            timelineEl.appendChild(label);
+          }
+          current.setMonth(current.getMonth() + 1);
+        }
+      }
+
+      // Simple label-overlap fix
+      function adjustOverlappingLabels() {
+        const labels = Array.from(document.querySelectorAll('.timestamp-label'));
+        labels.sort((a, b) => {
+          return a.parentElement.offsetLeft - b.parentElement.offsetLeft;
+        });
+        for (let i = 0; i < labels.length - 1; i++) {
+          const curRect = labels[i].getBoundingClientRect();
+          const nxtRect = labels[i + 1].getBoundingClientRect();
+          if (nxtRect.left < curRect.right + 5) {
+            const offset = 25 * ((i + 1) % 3);
+            labels[i + 1].style.bottom = (55 + offset) + "px";
+          }
+        }
+      }
+
+      function highlightMarker(idx) {
+        const marker = document.querySelector(`.timestamp-marker[data-index='${idx}']`);
+        if (marker) marker.classList.add('highlighted');
+        const li = document.querySelector(`.timestamp-item[data-index='${idx}']`);
+        if (li) li.classList.add('highlighted');
+        hoveredIndex = idx;
+      }
+
+      function unhighlightAllMarkers() {
+        document.querySelectorAll('.timestamp-marker').forEach(m => m.classList.remove('highlighted'));
+        document.querySelectorAll('.timestamp-item').forEach(i => i.classList.remove('highlighted'));
+        hoveredIndex = null;
+      }
+
+      function zoomIn() {
+        zoomLevel = Math.min(zoomLevel * 1.5, 500);
+        updateZoomLevel();
+        renderTimeline();
+      }
+
+      function zoomOut() {
+        zoomLevel = Math.max(zoomLevel / 1.5, 25);
+        updateZoomLevel();
+        renderTimeline();
+      }
+
+      function updateZoomLevel() {
+        zoomLevelEl.textContent = Math.round(zoomLevel) + "%";
+      }
+
+      function fitAllTimestamps() {
+        if (!timestamps.length) return;
+        zoomLevel = 100;
+        updateZoomLevel();
+        updateTimeRange();
+        renderTimeline();
+      }
+
+      function clearAllTimestamps() {
+        if (confirm("Are you sure you want to clear all timestamps?")) {
+          timestamps = [];
+          initializeTimeline();
+          renderTimestampList();
+        }
+      }
+
+      function showTooltip(e, content) {
+        tooltip.innerHTML = content;
+        tooltip.style.display = 'block';
+        moveTooltip(e);
+      }
+
+      function moveTooltip(e) {
+        tooltip.style.left = e.pageX + 10 + 'px';
+        tooltip.style.top = e.pageY + 10 + 'px';
+      }
+
+      function hideTooltip() {
+        tooltip.style.display = 'none';
+      }
+
+      // Mouse wheel to zoom
+      timelineContainer.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          zoomIn();
+        } else {
+          zoomOut();
+        }
+      });
+
+      // Click-drag for panning
+      let isDragging = false;
+      let dragStartX = 0;
+      let scrollStartX = 0;
+
+      timelineContainer.addEventListener('mousedown', function(e) {
+        isDragging = true;
+        dragStartX = e.clientX;
+        scrollStartX = timelineContainer.scrollLeft;
+        timelineContainer.style.cursor = 'grabbing';
+      });
+
+      document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        const dx = e.clientX - dragStartX;
+        timelineContainer.scrollLeft = scrollStartX - dx;
+      });
+
+      document.addEventListener('mouseup', function() {
+        isDragging = false;
+        timelineContainer.style.cursor = 'default';
+      });
+    });
+  </script>
+</body>
+</html>
